@@ -14,6 +14,7 @@ from celery.utils.log import get_logger
 
 from .tzcrontab import TzAwareCrontab
 from .session import ModelBase
+from .utils import get_timezone_from_crontab
 
 
 logger = get_logger('celery_sqlalchemy_scheduler.models')
@@ -120,7 +121,7 @@ class CrontabSchedule(ModelBase, ModelMixin):
         }
         if schedule.tz:
             spec.update({
-                'timezone': schedule.tz.zone
+                'timezone': get_timezone_from_crontab(schedule)
             })
         model = session.query(CrontabSchedule).filter_by(**spec).first()
         if not model:
