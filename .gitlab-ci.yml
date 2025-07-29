@@ -1,0 +1,66 @@
+image: docker:stable
+
+variables:
+  DOCKER_FILE_PATH: .deploy/Dockerfile
+  COMPOSE_FILE_PATH: .deploy/compose/docker-compose.factory.yml
+  CONTAINER_COMMIT_IMAGE: pharmatrail-lib-factory:$CI_COMMIT_SHA
+  CONTAINER_RELEASE_IMAGE: pharmatrail-lib-factory:$CI_COMMIT_TAG
+  CONTAINER_LATEST_IMAGE: pharmatrail-lib-factory:latest
+
+stages:
+  - build
+  - publish
+  - cleanup
+
+.compose-factory-up: &compose-factory-up
+  - docker-compose -f $COMPOSE_FILE_PATH -p $CI_PIPELINE_ID run --rm -e CI_API_V4_URL=${CI_API_V4_URL} -e CI_PROJECT_ID=${CI_PROJECT_ID} -e CI_JOB_TOKEN=${CI_JOB_TOKEN} factory
+
+.compose-factory-down: &compose-factory-down
+  - docker-compose -f $COMPOSE_FILE_PATH -p $CI_PIPELINE_ID down --volumes
+
+.docker-login: &docker-login
+  - echo $(aws ecr get-login-password --region "$AWS_DEFAULT_REGION") | docker login --username AWS --password-stdin $DOCKER_REGISTRY_URL
+
+.cleanup-template: &cleanup-template
+  stage: cleanup
+  script:
+    - echo Cleaned up after tests
+    - *compose-factory-down
+  tags:
+    - devops_infrastructure
+
+.factory-template: &factory-template
+  only:
+    - master
+  stage: publish
+  allow_failure: false
+  tags:
+    - devops_infrastructure
+
+build:
+  only:
+    - master
+  stage: build
+  before_script:
+    - *docker-login
+    - export PIP_EXTRA_INDEX_URL="https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.pharmatrail.io/api/v4/groups/24/-/packages/pypi/simple/"
+  script:
+    - docker pull $DOCKER_REGISTRY_URL/$CONTAINER_LATEST_IMAGE || true
+    - docker build -f $DOCKER_FILE_PATH --cache-from $CONTAINER_LATEST_IMAGE --tag $CONTAINER_COMMIT_IMAGE --build-arg PIP_EXTRA_INDEX_URL="${PIP_EXTRA_INDEX_URL}" .
+  tags:
+    - devops_infrastructure
+
+publish:
+  extends: .factory-template
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - *compose-factory-up
+  only:
+    - master
+  tags:
+    - devops_infrastructure
+
+cleanup_test:
+  when: always
+  <<: *cleanup-template

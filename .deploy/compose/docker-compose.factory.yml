@@ -1,0 +1,20 @@
+version: "3.5"
+
+services:
+
+  factory:
+    image: pharmatrail-lib-factory:$CI_COMMIT_SHA
+    container_name: pharmatrail-lib-factory-$CI_PIPELINE_ID
+    command: sh .deploy/bash/publish.sh
+    user: root
+    restart: "no"
+    networks:
+      - pharmatrail_lib_factory
+
+volumes:
+  db:
+
+networks:
+  pharmatrail_lib_factory:
+    name: pharmatrail-lib-factory-$CI_PIPELINE_ID
+    driver: bridge
